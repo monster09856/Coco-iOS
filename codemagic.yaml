@@ -32,6 +32,13 @@ workflows:
           flutter config --no-enable-swift-package-manager
           flutter pub get
           flutter precache --ios
+      - name: Bump iOS build number
+        script: |
+          cd ios
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo 49)
+          NEXT_BUILD=$((LATEST_BUILD_NUMBER + 1))
+          echo "Bumping to build number $NEXT_BUILD"
+          agvtool new-version -all "$NEXT_BUILD"
       - name: Build iOS app with Flutter
         script: |
           flutter build ios --release --no-codesign
