@@ -15,22 +15,11 @@ workflows:
       cache_paths:
         - $HOME/.pub-cache
     scripts:
-      - name: Set up keychain + auto-signing via ASC API
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          keychain add-certificates
-          xcode-project use-profiles --warn-only
       - name: Flutter pub get & precache
         script: |
           flutter config --no-enable-swift-package-manager
           flutter pub get
           flutter precache --ios
-      - name: Build iOS app with Flutter
-        script: |
-          flutter build ios --release --no-codesign
       - name: Bump iOS build number
         script: |
           cd ios
@@ -38,6 +27,17 @@ workflows:
           NEXT_BUILD=$((LATEST_BUILD_NUMBER + 1))
           echo "Bumping to build number $NEXT_BUILD"
           agvtool new-version -all "$NEXT_BUILD"
+      - name: Build iOS app with Flutter
+        script: |
+          flutter build ios --release --no-codesign
+      - name: Set up keychain + auto-signing via ASC API
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: Build IPA via Codemagic xcode-project
         script: |
           xcode-project build-ipa \
