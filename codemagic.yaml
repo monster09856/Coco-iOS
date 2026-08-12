@@ -24,6 +24,8 @@ workflows:
             --create
           keychain add-certificates
           xcode-project use-profiles
+      - name: Disable Swift Package Manager (use standard CocoaPods)
+        script: flutter config --no-enable-swift-package-manager
       - name: Flutter pub get
         script: flutter pub get
       - name: Precache iOS artifacts
@@ -34,7 +36,7 @@ workflows:
           # is created, then run pod install.
           flutter build ios --config-only --release --no-codesign
           cd ios
-          pod install
+          pod install --repo-update
       - name: Bump iOS build number
         script: |
           cd ios
