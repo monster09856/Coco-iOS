@@ -1,4 +1,5 @@
 platform :ios, '13.0'
+source 'https://cdn.cocoapods.org/'
 
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
