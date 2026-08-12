@@ -28,14 +28,14 @@ workflows:
           flutter config --no-enable-swift-package-manager
           flutter pub get
           flutter precache --ios
-      - name: Build iOS IPA with Flutter
+      - name: Build iOS app with Flutter
         script: |
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo 49)
-          NEXT_BUILD=$((LATEST_BUILD_NUMBER + 1))
-          echo "Building IPA with build number $NEXT_BUILD"
-          flutter build ipa --release \
-            --build-number="$NEXT_BUILD" \
-            --export-options-plist=/Users/builder/export_options.plist
+          flutter build ios --release --no-codesign
+      - name: Build IPA via Codemagic xcode-project
+        script: |
+          xcode-project build-ipa \
+            --workspace ios/Runner.xcworkspace \
+            --scheme Runner
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
