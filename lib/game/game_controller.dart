@@ -271,10 +271,10 @@ class GameController extends ChangeNotifier {
 
       // Check obstacles destroyed by specials
       final specialPositions = specialEffects.map((e) => e.position).toList();
-      final boxes = ObstacleEngine.checkBoxes(_grid, specialPositions);
-      final chains = ObstacleEngine.damageAdjacentChains(_grid, specialPositions);
+      ObstacleEngine.checkBoxes(_grid, specialPositions);
+      ObstacleEngine.damageAdjacentChains(_grid, specialPositions);
       final choco = ObstacleEngine.damageAdjacentChocolates(_grid, specialPositions);
-      final fog = ObstacleEngine.damageAdjacentFog(_grid, specialPositions);
+      ObstacleEngine.damageAdjacentFog(_grid, specialPositions);
       final ice = ObstacleEngine.damageAdjacentIce(_grid, specialPositions);
 
       if (choco > 0) {
@@ -465,10 +465,10 @@ class GameController extends ChangeNotifier {
       }
 
       // Obstacle interactions
-      final boxes = ObstacleEngine.checkBoxes(_grid, explosionPositions);
-      final chains = ObstacleEngine.damageAdjacentChains(_grid, explosionPositions);
+      ObstacleEngine.checkBoxes(_grid, explosionPositions);
+      ObstacleEngine.damageAdjacentChains(_grid, explosionPositions);
       final choco = ObstacleEngine.damageAdjacentChocolates(_grid, explosionPositions);
-      final fog = ObstacleEngine.damageAdjacentFog(_grid, explosionPositions);
+      ObstacleEngine.damageAdjacentFog(_grid, explosionPositions);
       final ice = ObstacleEngine.damageAdjacentIce(_grid, explosionPositions);
 
       if (choco > 0) {

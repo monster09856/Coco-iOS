@@ -2223,46 +2223,7 @@ class _HintHighlight extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CustomPainters for obstacles (kept lightweight)
-// ─────────────────────────────────────────────────────────────────────────────
 
-class _CrossPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFA07820)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final m = size.width * 0.15;
-    canvas.drawLine(Offset(m, m), Offset(size.width - m, size.height - m), paint);
-    canvas.drawLine(Offset(size.width - m, m), Offset(m, size.height - m), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _ChainPainter extends CustomPainter {
-  final int level;
-  _ChainPainter({required this.level});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFA0A0A0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = level == 2 ? 3.0 : 2.0
-      ..strokeCap = StrokeCap.round;
-    final m = size.width * 0.15;
-    canvas.drawLine(Offset(m, m), Offset(size.width - m, size.height - m), paint);
-    canvas.drawLine(Offset(size.width - m, m), Offset(m, size.height - m), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tropical destroy burst — per-product particle effect when matched
