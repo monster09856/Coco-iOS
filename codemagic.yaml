@@ -18,6 +18,11 @@ workflows:
       - name: Set up keychain + auto-signing via ASC API
         script: |
           keychain initialize
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "Generating RSA private key for distribution certificate..."
+            openssl genrsa -out /tmp/cert_key.pem 2048
+            export CERTIFICATE_PRIVATE_KEY=$(cat /tmp/cert_key.pem)
+          fi
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
