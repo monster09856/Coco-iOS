@@ -839,7 +839,7 @@ class _SettingToggle extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: TT.palm,
+            activeColor: TT.palm,
             activeTrackColor: TT.palmLight,
           ),
         ],
