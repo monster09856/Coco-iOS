@@ -13,6 +13,9 @@ class LevelStartPopup extends StatefulWidget {
   final int level;
   final int earnedStars;
   final int highScore;
+  final int hammerCount;
+  final int colorBlastCount;
+  final int extraMovesCount;
   final VoidCallback onPlay;
   final VoidCallback onClose;
 
@@ -21,6 +24,9 @@ class LevelStartPopup extends StatefulWidget {
     required this.level,
     required this.earnedStars,
     required this.highScore,
+    this.hammerCount = 0,
+    this.colorBlastCount = 0,
+    this.extraMovesCount = 0,
     required this.onPlay,
     required this.onClose,
   });
@@ -136,9 +142,9 @@ class _LevelStartPopupState extends State<LevelStartPopup>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                _BoosterSlot(asset: TA.boosterHammer, count: 0),
-                                _BoosterSlot(asset: TA.boosterColorBlast, count: 0),
-                                _BoosterSlot(asset: TA.boosterExtraMoves, count: 0),
+                                _BoosterSlot(asset: TA.boosterHammer, count: widget.hammerCount),
+                                _BoosterSlot(asset: TA.boosterColorBlast, count: widget.colorBlastCount),
+                                _BoosterSlot(asset: TA.boosterExtraMoves, count: widget.extraMovesCount),
                               ],
                             ),
                             const SizedBox(height: 16),

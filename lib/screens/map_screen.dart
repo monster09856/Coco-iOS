@@ -321,6 +321,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
               level: _showLevelStartPopupFor!,
               earnedStars: progress.starsForLevel(_showLevelStartPopupFor!),
               highScore: progress.highScores[_showLevelStartPopupFor!] ?? 0,
+              hammerCount: progress.hammerCount,
+              colorBlastCount: progress.colorBlastCount,
+              extraMovesCount: progress.extraMovesCount,
               onPlay: () {
                 final lvl = _showLevelStartPopupFor!;
                 setState(() => _showLevelStartPopupFor = null);
