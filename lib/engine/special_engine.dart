@@ -64,34 +64,56 @@ class SpecialEngine {
     final s1 = c1.specialType;
     final s2 = c2.specialType;
 
-    // rainbow + rainbow = clear entire board
+    // 1. Rainbow + Rainbow: Clear entire board
     if (s1 == SpecialType.rainbow && s2 == SpecialType.rainbow) {
       return _clearEntireBoard(grid);
     }
 
-    // bomb + bomb = 5x5 area
+    // 2. Bomb + Bomb: 5x5 massive explosion
     if (s1 == SpecialType.bomb && s2 == SpecialType.bomb) {
       return _activateBomb(grid, pos1, 5);
     }
 
-    // rocket + rocket = cross (full row + full col)
+    // 3. Rocket + Rocket: Cross laser (full row + full col)
     if (_isRocket(s1) && _isRocket(s2)) {
       return _activateCross(grid, pos1);
     }
 
-    // rocket + bomb = 3 rows + 3 cols cross
+    // 4. Rocket + Bomb: 3 rows + 3 cols mega cross
     if ((_isRocket(s1) && s2 == SpecialType.bomb) ||
         (s1 == SpecialType.bomb && _isRocket(s2))) {
       final center = _isRocket(s1) ? pos1 : pos2;
       return _activateWideCross(grid, center);
     }
 
-    // rainbow + any = clear all of the non-rainbow's color
+    // 5. Rainbow + Rocket: Transform all jellies of target color into Rockets and fire them!
+    if ((s1 == SpecialType.rainbow && _isRocket(s2)) ||
+        (_isRocket(s1) && s2 == SpecialType.rainbow)) {
+      final rainbowPos = s1 == SpecialType.rainbow ? pos1 : pos2;
+      final rocketCell = s1 == SpecialType.rainbow ? c2 : c1;
+      final targetColor = rocketCell.jellyType ?? _pickRandomBoardColor(grid);
+      _clearCell(grid, pos1);
+      _clearCell(grid, pos2);
+      return _activateRainbowRocketCombo(grid, rainbowPos, targetColor);
+    }
+
+    // 6. Rainbow + Bomb: Transform all jellies of target color into Bombs and detonate them!
+    if ((s1 == SpecialType.rainbow && s2 == SpecialType.bomb) ||
+        (s1 == SpecialType.bomb && s2 == SpecialType.rainbow)) {
+      final rainbowPos = s1 == SpecialType.rainbow ? pos1 : pos2;
+      final bombCell = s1 == SpecialType.rainbow ? c2 : c1;
+      final targetColor = bombCell.jellyType ?? _pickRandomBoardColor(grid);
+      _clearCell(grid, pos1);
+      _clearCell(grid, pos2);
+      return _activateRainbowBombCombo(grid, rainbowPos, targetColor);
+    }
+
+    // 7. Rainbow + Regular Jelly (or any other piece)
     if (s1 == SpecialType.rainbow || s2 == SpecialType.rainbow) {
       final nonRainbowCell = s1 == SpecialType.rainbow ? c2 : c1;
       final rainbowPos = s1 == SpecialType.rainbow ? pos1 : pos2;
       final otherPos = s1 == SpecialType.rainbow ? pos2 : pos1;
-      final color = nonRainbowCell.jellyType;
+      final color = nonRainbowCell.jellyType ?? _pickRandomBoardColor(grid);
       _clearCell(grid, otherPos);
       return _activateRainbow(grid, rainbowPos, color);
     }
@@ -100,6 +122,70 @@ class SpecialEngine {
     final effects = <ExplosionEffect>[];
     effects.addAll(activateSpecial(grid, pos1, null));
     effects.addAll(activateSpecial(grid, pos2, null));
+    return effects;
+  }
+
+  static JellyType _pickRandomBoardColor(GameGrid grid) {
+    for (int r = 0; r < grid.rows; r++) {
+      for (int c = 0; c < grid.cols; c++) {
+        final cell = grid.get(r, c);
+        if (cell.jellyType != null) return cell.jellyType!;
+      }
+    }
+    return JellyType.purple;
+  }
+
+  /// Rainbow + Rocket: Transforms all jellies of [color] into rockets and fires them.
+  static List<ExplosionEffect> _activateRainbowRocketCombo(
+    GameGrid grid,
+    Position rainbowPos,
+    JellyType color,
+  ) {
+    final rocketPositions = <Position>[];
+    for (int r = 0; r < grid.rows; r++) {
+      for (int c = 0; c < grid.cols; c++) {
+        final cell = grid.get(r, c);
+        if (cell.jellyType == color && !cell.isIceWall) {
+          rocketPositions.add(Position(r, c));
+        }
+      }
+    }
+
+    final effects = <ExplosionEffect>[];
+    bool horizontal = true;
+    for (final pos in rocketPositions) {
+      if (horizontal) {
+        effects.addAll(_activateRocketHorizontal(grid, pos));
+      } else {
+        effects.addAll(_activateRocketVertical(grid, pos));
+      }
+      horizontal = !horizontal;
+    }
+    grid.bumpVersion();
+    return effects;
+  }
+
+  /// Rainbow + Bomb: Transforms all jellies of [color] into bombs and detonates them.
+  static List<ExplosionEffect> _activateRainbowBombCombo(
+    GameGrid grid,
+    Position rainbowPos,
+    JellyType color,
+  ) {
+    final bombPositions = <Position>[];
+    for (int r = 0; r < grid.rows; r++) {
+      for (int c = 0; c < grid.cols; c++) {
+        final cell = grid.get(r, c);
+        if (cell.jellyType == color && !cell.isIceWall) {
+          bombPositions.add(Position(r, c));
+        }
+      }
+    }
+
+    final effects = <ExplosionEffect>[];
+    for (final pos in bombPositions) {
+      effects.addAll(_activateBomb(grid, pos, 3));
+    }
+    grid.bumpVersion();
     return effects;
   }
 

@@ -61,3 +61,4 @@ graphify-out/
 *.cer
 *.mobileprovision
 
+key.properties

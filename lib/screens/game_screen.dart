@@ -65,12 +65,22 @@ class _GameScreenState extends ConsumerState<GameScreen>
 
   // Level-start mascot greeting overlay — shown once at level open.
   bool _showGreeting = true;
+  String? _statusBannerText;
+  Timer? _statusBannerTimer;
 
   @override
   void initState() {
     super.initState();
     _controller = GameController();
     _controller.addListener(_onChange);
+    _controller.onStatusBanner = (msg) {
+      if (!mounted) return;
+      setState(() => _statusBannerText = msg);
+      _statusBannerTimer?.cancel();
+      _statusBannerTimer = Timer(const Duration(milliseconds: 1800), () {
+        if (mounted) setState(() => _statusBannerText = null);
+      });
+    };
     // Decrement player's booster count when the controller fires its effect.
     _controller.onBoosterUsed = (type) {
       ref.read(playerProgressProvider.notifier).consumeBooster(type);
@@ -333,16 +343,18 @@ class _GameScreenState extends ConsumerState<GameScreen>
                                       child: child,
                                     );
                                   },
-                                  child: _IslandFrameBoard(
-                                    child: GameBoard(
-                                      grid: _controller.grid,
-                                      selectedCell: _controller.selectedCell,
-                                      hintPositions: _controller.hintPositions,
-                                      boosterMode: _controller.boosterMode,
-                                      onCellTapped: (pos) => _controller.onCellTapped(pos),
-                                      onSwipe: (pos, dir) => _controller.onSwipeTo(pos, dir),
-                                      animator: _controller.animator,
-                                      onCellMetrics: _controller.setCellMetrics,
+                                  child: RepaintBoundary(
+                                    child: _IslandFrameBoard(
+                                      child: GameBoard(
+                                        grid: _controller.grid,
+                                        selectedCell: _controller.selectedCell,
+                                        hintPositions: _controller.hintPositions,
+                                        boosterMode: _controller.boosterMode,
+                                        onCellTapped: (pos) => _controller.onCellTapped(pos),
+                                        onSwipe: (pos, dir) => _controller.onSwipeTo(pos, dir),
+                                        animator: _controller.animator,
+                                        onCellMetrics: _controller.setCellMetrics,
+                                      ),
                                     ),
                                   ),
                                 );
@@ -374,6 +386,50 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     left: 0,
                     right: 0,
                     child: Center(child: ComboText(comboCount: _displayedCombo!)),
+                  ),
+                if (_statusBannerText != null)
+                  Positioned(
+                    top: MediaQuery.of(context).size.height * 0.40,
+                    left: 20,
+                    right: 20,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFB703), Color(0xFFFB8500)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black45,
+                              blurRadius: 16,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          _statusBannerText!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black54,
+                                offset: Offset(1, 2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 if (_skipBtnVisible)
                   Positioned(
@@ -571,11 +627,13 @@ class _FireflyLayerState extends State<_FireflyLayer>
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (_, __) => CustomPaint(
-          size: MediaQuery.of(context).size,
-          painter: _FireflyPainter(t: _ctrl.value),
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, __) => CustomPaint(
+            size: MediaQuery.of(context).size,
+            painter: _FireflyPainter(t: _ctrl.value),
+          ),
         ),
       ),
     );

@@ -153,11 +153,10 @@ class PlayerProgress {
   int starsForLevel(int level) => stars[level] ?? 0;
 
   bool isLevelUnlocked(int level) {
-    // PRODUCTION GATING — level 1 always open; each subsequent level needs
-    // the previous one to have earned at least 1 star.
     if (level < 1 || level > 240) return false;
     if (level == 1) return true;
-    return starsForLevel(level - 1) > 0;
+    // Level is unlocked if previous level has stars OR it is within player's current reached level
+    return starsForLevel(level - 1) > 0 || level <= currentLevel;
   }
 
   /// Called after a successful level. Bumps streak; every 15th win wipes

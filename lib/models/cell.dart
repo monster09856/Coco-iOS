@@ -33,12 +33,29 @@ class Cell {
   bool get isChained =>
       obstacle == ObstacleType.chain1 || obstacle == ObstacleType.chain2;
 
+  bool get isIce =>
+      obstacle == ObstacleType.ice1 || obstacle == ObstacleType.ice2;
+
+  bool get isFog => obstacle == ObstacleType.fog;
+  bool get isChocolate => obstacle == ObstacleType.chocolate;
+  bool get isBox => obstacle == ObstacleType.box;
+
+  /// Whether this cell can participate in a color match.
+  /// Chained, iced, and fogged jellies CAN match if they have a valid jelly!
   bool get canMatch =>
       hasJelly &&
-      !isChained &&
+      !isIceWall &&
       obstacle != ObstacleType.box &&
-      obstacle != ObstacleType.chocolate &&
-      obstacle != ObstacleType.fog;
+      obstacle != ObstacleType.chocolate;
+
+  /// Whether this cell can be actively dragged / swapped by the player.
+  /// Chained cells and blockers cannot be swapped.
+  bool get canSwap =>
+      hasJelly &&
+      !isChained &&
+      !isIceWall &&
+      obstacle != ObstacleType.box &&
+      obstacle != ObstacleType.chocolate;
 
   bool get isBubble => obstacle == ObstacleType.bubble;
   bool get isIceWall => obstacle == ObstacleType.iceWall;

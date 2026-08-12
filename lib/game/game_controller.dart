@@ -51,6 +51,8 @@ class GameController extends ChangeNotifier {
   Timer? _countdownTimer;
   ActiveBoosterMode _boosterMode = ActiveBoosterMode.none;
   List<LevelGoal> _goals = [];
+  bool _isReshuffling = false;
+  bool _isPartyMode = false;
 
   /// Fired when a booster's effect actually applies to the board (or, in the
   /// case of extraMoves, when activated). The screen layer wires this to
@@ -66,6 +68,9 @@ class GameController extends ChangeNotifier {
   /// [intensity] in 0..1 scale (0.3 = small combo, 1.0 = big bomb).
   void Function(double intensity)? onScreenShake;
 
+  /// Fired on board status banners (e.g. "Karıştırılıyor...", "PatPat Party!").
+  void Function(String message)? onStatusBanner;
+
   // ─── Public getters ──────────────────────────────────────────────
   GameGrid get grid => _grid;
   LevelConfig get config => _config;
@@ -79,6 +84,8 @@ class GameController extends ChangeNotifier {
   (Position, Position)? get hintPositions => _hintPositions;
   ActiveBoosterMode get boosterMode => _boosterMode;
   List<LevelGoal> get goals => _goals;
+  bool get isReshuffling => _isReshuffling;
+  bool get isPartyMode => _isPartyMode;
 
   int get stars => ScoreCalculator.starsForScore(_score, _config.targetScore);
   int get coinsEarned =>
@@ -194,8 +201,8 @@ class GameController extends ChangeNotifier {
     final c1 = _grid.get(pos1.row, pos1.col);
     final c2 = _grid.get(pos2.row, pos2.col);
 
-    // Reject chained cells
-    if (c1.isChained || c2.isChained) {
+    // Reject non-swappable cells (chains, ice walls, boxes, chocolate)
+    if (!c1.canSwap || !c2.canSwap) {
       notifyListeners();
       return;
     }
@@ -226,46 +233,61 @@ class GameController extends ChangeNotifier {
     _movesLeft--;
     notifyListeners();
 
+    // Read special types BEFORE visual swap
+    final beforeC1 = _grid.get(pos1.row, pos1.col);
+    final beforeC2 = _grid.get(pos2.row, pos2.col);
+    final s1 = beforeC1.specialType;
+    final s2 = beforeC2.specialType;
+
     // Animate the swap visually BEFORE modifying the grid
     SoundManager.instance.play(SoundManager.swap, volume: 0.5);
     await animator.animateSwap(pos1, pos2, _cellSize, _cellGap, durationMs: 200);
     MatchEngine.swap(_grid, pos1, pos2);
     notifyListeners();
 
-    // Check for special combos
-    final c1 = _grid.get(pos1.row, pos1.col);
-    final c2 = _grid.get(pos2.row, pos2.col);
-    final s1 = c1.specialType;
-    final s2 = c2.specialType;
-
     List<ExplosionEffect>? specialEffects;
     SpecialEffectType? effectType;
-    Position effectOrigin = pos1;
+    Position effectOrigin = pos2;
+    bool chocolateDestroyedThisMove = false;
 
     if (s1 != SpecialType.none && s2 != SpecialType.none) {
       effectType = _getComboEffectType(s1, s2);
       specialEffects = SpecialEngine.activateSpecialCombo(_grid, pos1, pos2);
-      _updateGoalsFromEffects(specialEffects);
     } else if (s1 != SpecialType.none) {
+      // s1 moved from pos1 to pos2 -> activate at pos2 with beforeC2's jelly
       effectType = _getSpecialEffectType(s1);
-      specialEffects = SpecialEngine.activateSpecial(_grid, pos1, c2.jellyType);
-      _updateGoalsFromEffects(specialEffects);
-      effectOrigin = pos1;
-    } else if (s2 != SpecialType.none) {
-      effectType = _getSpecialEffectType(s2);
-      specialEffects = SpecialEngine.activateSpecial(_grid, pos2, c1.jellyType);
-      _updateGoalsFromEffects(specialEffects);
+      specialEffects = SpecialEngine.activateSpecial(_grid, pos2, beforeC2.jellyType);
       effectOrigin = pos2;
+    } else if (s2 != SpecialType.none) {
+      // s2 moved from pos2 to pos1 -> activate at pos1 with beforeC1's jelly
+      effectType = _getSpecialEffectType(s2);
+      specialEffects = SpecialEngine.activateSpecial(_grid, pos1, beforeC1.jellyType);
+      effectOrigin = pos1;
     }
 
-    // If a special was activated, play the spectacular overlay effect,
-    // then run gravity + fill so cleared cells don't leave empty holes.
+    // If a special was activated, play overlay effect & resolve board
     if (specialEffects != null && specialEffects.isNotEmpty) {
+      _updateGoalsFromEffects(specialEffects);
+
+      // Check obstacles destroyed by specials
+      final specialPositions = specialEffects.map((e) => e.position).toList();
+      final boxes = ObstacleEngine.checkBoxes(_grid, specialPositions);
+      final chains = ObstacleEngine.damageAdjacentChains(_grid, specialPositions);
+      final choco = ObstacleEngine.damageAdjacentChocolates(_grid, specialPositions);
+      final fog = ObstacleEngine.damageAdjacentFog(_grid, specialPositions);
+      final ice = ObstacleEngine.damageAdjacentIce(_grid, specialPositions);
+
+      if (choco > 0) {
+        chocolateDestroyedThisMove = true;
+        _recordChocolateCleared(choco);
+      }
+      if (ice > 0) {
+        _recordIceBroken(ice);
+      }
+
       final specialScore = specialEffects.length * 15;
       _score += specialScore;
       onScorePopup?.call(specialScore, effectOrigin);
-      // Big shake for any special activation — bombs and rainbows shouldn't
-      // feel like a swap.
       onScreenShake?.call(
         effectType == SpecialEffectType.bombBlast ||
                 effectType == SpecialEffectType.megaBomb
@@ -276,7 +298,6 @@ class GameController extends ChangeNotifier {
       final targetPositions =
           specialEffects.map((e) => e.position).toList();
 
-      // Determine effect duration based on type
       final durationMs = switch (effectType) {
         SpecialEffectType.rainbowWave => 500,
         SpecialEffectType.boardClear => 550,
@@ -285,7 +306,6 @@ class GameController extends ChangeNotifier {
         _ => 400,
       };
 
-      // Play the spectacular overlay effect
       notifyListeners();
       if (effectType != null) {
         await animator.playSpecialEffect(SpecialEffect(
@@ -295,7 +315,6 @@ class GameController extends ChangeNotifier {
           durationMs: durationMs,
         ));
       } else {
-        // Fallback to simple flash for unknown types
         await animator.animateSpecialActivation(targetPositions,
             durationMs: 300);
       }
@@ -320,16 +339,28 @@ class GameController extends ChangeNotifier {
       }
     }
 
-    // Spread chocolate (happens once per move, before cascade)
-    ObstacleEngine.spreadChocolate(_grid);
-
     // Process any chain reactions from the new board configuration
-    await _processMatchChain(specialEffects != null ? null : pos1);
+    final chocoInChain = await _processMatchChain(specialEffects != null ? null : pos1);
+    if (chocoInChain) {
+      chocolateDestroyedThisMove = true;
+    }
+
+    // Spread chocolate ONLY if no chocolate was destroyed on this move!
+    if (!chocolateDestroyedThisMove) {
+      ObstacleEngine.spreadChocolate(_grid);
+    }
+
+    await _checkGameStatus();
+    _resetHintTimer();
+    notifyListeners();
   }
 
   // ─── 6. _processMatchChain ─────────────────────────────────────
 
-  Future<void> _processMatchChain(Position? swapPos) async {
+  /// Resolves cascades and returns true if any chocolate was destroyed.
+  Future<bool> _processMatchChain(Position? swapPos) async {
+    bool chocolateDestroyed = false;
+
     for (int iteration = 0; iteration < 20; iteration++) {
       final snapshot = _grid.snapshot();
       final matches = MatchEngine.findMatches(snapshot);
@@ -339,6 +370,9 @@ class GameController extends ChangeNotifier {
       if (_comboCount > _maxComboThisLevel) {
         _maxComboThisLevel = _comboCount;
       }
+      if (_comboCount >= 2) {
+        _recordComboMade();
+      }
 
       // Calculate score for this iteration
       for (final match in matches) {
@@ -347,7 +381,6 @@ class GameController extends ChangeNotifier {
                 pow(1.5, _comboCount - 1))
             .toInt();
         _score += matchScore;
-        // Centroid for floating "+N" popup.
         final cx = match.positions.fold<double>(0, (a, p) => a + p.col) /
             match.positions.length;
         final cy = match.positions.fold<double>(0, (a, p) => a + p.row) /
@@ -361,19 +394,24 @@ class GameController extends ChangeNotifier {
           onScorePopup?.call(bonus, Position(cy.round(), cx.round()));
         }
 
-        // Only the biggest match shakes; 4-match no longer triggers any
-        // shake (was too jittery on cascade boards).
         if (match.positions.length >= 5) {
           onScreenShake?.call(0.35);
         }
       }
 
-      // Determine which positions will get a special spawned —
-      // these must NOT be destroyed visually.
+      // Count ice underlay broken by direct matches
+      for (final match in matches) {
+        for (final pos in match.positions) {
+          final cell = _grid.get(pos.row, pos.col);
+          if (cell.isIce) {
+            _recordIceBroken(1);
+          }
+        }
+      }
+
       final spawnPositions = MatchEngine.getSpawnPositions(matches, swapPos);
 
-      // Destroying phase — animate matched cells with pop + fade,
-      // but exclude spawn positions so the new special stays visible.
+      // Destroying phase — animate matched cells
       _state = GameState.destroying;
       final explosionPositions = <Position>[];
       for (final match in matches) {
@@ -383,14 +421,33 @@ class GameController extends ChangeNotifier {
           }
         }
       }
+
+      if (_skipRequested) {
+        MatchEngine.removeMatches(_grid, matches, swapPos);
+        _updateGoalsFromMatches(matches);
+        ObstacleEngine.checkBoxes(_grid, explosionPositions);
+        ObstacleEngine.damageAdjacentChains(_grid, explosionPositions);
+        final choco = ObstacleEngine.damageAdjacentChocolates(_grid, explosionPositions);
+        ObstacleEngine.damageAdjacentFog(_grid, explosionPositions);
+        final ice = ObstacleEngine.damageAdjacentIce(_grid, explosionPositions);
+        if (choco > 0) {
+          chocolateDestroyed = true;
+          _recordChocolateCleared(choco);
+        }
+        if (ice > 0) _recordIceBroken(ice);
+        MatchEngine.applyGravity(_grid);
+        MatchEngine.fillEmpty(_grid, _config.availableTypes);
+        swapPos = null;
+        notifyListeners();
+        continue;
+      }
+
       notifyListeners();
-      // Brief pre-destroy golden flash so the player sees what's matching.
-      // Skip for the very first chain after a swap to avoid double-flashing
-      // the swap-to-match transition.
+
       if (_comboCount > 1 || swapPos == null) {
         await animator.animatePreMatchGlow(explosionPositions, durationMs: 65);
       }
-      // Play match SFX — combo tone for chains, regular pop otherwise.
+
       if (_comboCount >= 2) {
         SoundManager.instance.play(SoundManager.combo, volume: 0.6);
       } else {
@@ -401,7 +458,6 @@ class GameController extends ChangeNotifier {
       MatchEngine.removeMatches(_grid, matches, swapPos);
       _updateGoalsFromMatches(matches);
 
-      // Animate + sound when a new special is spawned (4/5/6+ matches).
       if (spawnPositions.isNotEmpty) {
         SoundManager.instance.play(SoundManager.special, volume: 0.7);
         notifyListeners();
@@ -409,12 +465,22 @@ class GameController extends ChangeNotifier {
       }
 
       // Obstacle interactions
-      ObstacleEngine.checkBoxes(_grid, explosionPositions);
-      ObstacleEngine.damageAdjacentChains(_grid, explosionPositions);
-      ObstacleEngine.damageAdjacentChocolates(_grid, explosionPositions);
+      final boxes = ObstacleEngine.checkBoxes(_grid, explosionPositions);
+      final chains = ObstacleEngine.damageAdjacentChains(_grid, explosionPositions);
+      final choco = ObstacleEngine.damageAdjacentChocolates(_grid, explosionPositions);
+      final fog = ObstacleEngine.damageAdjacentFog(_grid, explosionPositions);
+      final ice = ObstacleEngine.damageAdjacentIce(_grid, explosionPositions);
+
+      if (choco > 0) {
+        chocolateDestroyed = true;
+        _recordChocolateCleared(choco);
+      }
+      if (ice > 0) {
+        _recordIceBroken(ice);
+      }
       notifyListeners();
 
-      // Falling phase — animate gravity with bounce
+      // Falling phase
       _state = GameState.falling;
       final fallMoves = MatchEngine.applyGravity(_grid);
       notifyListeners();
@@ -422,7 +488,7 @@ class GameController extends ChangeNotifier {
         await animator.animateFall(fallMoves, _cellSize, _cellGap, durationMs: 250);
       }
 
-      // Refilling phase — animate new jellies sliding in from above
+      // Refilling phase
       _state = GameState.refilling;
       final newPositions = MatchEngine.fillEmpty(_grid, _config.availableTypes);
       notifyListeners();
@@ -430,16 +496,13 @@ class GameController extends ChangeNotifier {
         await animator.animateAppear(newPositions, _cellSize, _cellGap, durationMs: 250);
       }
 
-      // After first iteration, swapPos is no longer relevant
       swapPos = null;
     }
 
-    _checkGameStatus();
-    _resetHintTimer();
-    notifyListeners();
+    return chocolateDestroyed;
   }
 
-  // ─── 7. _updateGoalsFromMatches ────────────────────────────────
+  // ─── 7. Goal tracking methods ──────────────────────────────────
 
   void _updateGoalsFromMatches(List<Match> matches) {
     for (final match in matches) {
@@ -452,8 +515,6 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  // ─── 8. _updateGoalsFromEffects ────────────────────────────────
-
   void _updateGoalsFromEffects(List<ExplosionEffect> effects) {
     for (final effect in effects) {
       for (final goal in _goals) {
@@ -461,6 +522,30 @@ class GameController extends ChangeNotifier {
             goal.jellyType == effect.jellyType) {
           goal.collected += 1;
         }
+      }
+    }
+  }
+
+  void _recordIceBroken(int count) {
+    for (final goal in _goals) {
+      if (goal.goalType == GoalType.breakIce) {
+        goal.collected += count;
+      }
+    }
+  }
+
+  void _recordChocolateCleared(int count) {
+    for (final goal in _goals) {
+      if (goal.goalType == GoalType.clearChocolate) {
+        goal.collected += count;
+      }
+    }
+  }
+
+  void _recordComboMade() {
+    for (final goal in _goals) {
+      if (goal.goalType == GoalType.makeCombos) {
+        goal.collected += 1;
       }
     }
   }
@@ -475,7 +560,7 @@ class GameController extends ChangeNotifier {
       SpecialType.bomb => SpecialEffectType.bombBlast,
       SpecialType.rainbow => SpecialEffectType.rainbowWave,
       SpecialType.lightning => SpecialEffectType.lightningStrike,
-      SpecialType.none => SpecialEffectType.bombBlast, // should not happen
+      SpecialType.none => SpecialEffectType.bombBlast,
     };
   }
 
@@ -487,39 +572,38 @@ class GameController extends ChangeNotifier {
     final isRocket2 =
         s2 == SpecialType.rocketHorizontal || s2 == SpecialType.rocketVertical;
 
-    // rainbow + rainbow
     if (s1 == SpecialType.rainbow && s2 == SpecialType.rainbow) {
       return SpecialEffectType.boardClear;
     }
-    // bomb + bomb
     if (s1 == SpecialType.bomb && s2 == SpecialType.bomb) {
       return SpecialEffectType.megaBomb;
     }
-    // rocket + rocket
     if (isRocket1 && isRocket2) {
       return SpecialEffectType.rocketCross;
     }
-    // rocket + bomb or bomb + rocket
     if ((isRocket1 && s2 == SpecialType.bomb) ||
         (s1 == SpecialType.bomb && isRocket2)) {
       return SpecialEffectType.multiBeam;
     }
-    // rainbow + any
     if (s1 == SpecialType.rainbow || s2 == SpecialType.rainbow) {
       return SpecialEffectType.rainbowWave;
     }
-    // Fallback: use first special's effect
     return _getSpecialEffectType(s1);
   }
 
-  // ─── 9. _checkGameStatus ───────────────────────────────────────
+  // ─── 9. _checkGameStatus & Reshuffle / Celebration ─────────────
 
-  void _checkGameStatus() {
+  Future<void> _checkGameStatus() async {
     if (allGoalsComplete) {
+      // Sugar Crush / PatPat Party celebration if moves left > 0
+      if (_movesLeft > 0) {
+        await _runPatPatPartyCelebration();
+      }
       _state = GameState.levelComplete;
       _countdownTimer?.cancel();
       _countdownTimer = null;
       SoundManager.instance.play(SoundManager.success, volume: 0.8);
+      notifyListeners();
       return;
     }
 
@@ -528,17 +612,124 @@ class GameController extends ChangeNotifier {
       _countdownTimer?.cancel();
       _countdownTimer = null;
       SoundManager.instance.play(SoundManager.fail, volume: 0.7);
+      notifyListeners();
+      return;
+    }
+
+    // Check for deadlock / no valid moves
+    if (!HintEngine.hasValidMoves(_grid)) {
+      await _handleAutoReshuffle();
       return;
     }
 
     _state = GameState.idle;
     animator.endSkipMode();
+    notifyListeners();
   }
 
-  /// Tell the animator to fast-forward all running + pending animations.
-  /// The cascade resolves logically the same way, just visually instantly.
+  /// Automatically reshuffles the board when no valid moves exist.
+  Future<void> _handleAutoReshuffle() async {
+    _isReshuffling = true;
+    _state = GameState.checking;
+    onStatusBanner?.call('Hamle Kalmadı! Karıştırılıyor...');
+    SoundManager.instance.play(SoundManager.chirp, volume: 0.7);
+    notifyListeners();
+
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+
+    HintEngine.reshuffle(_grid, _config.availableTypes);
+    _isReshuffling = false;
+    _state = GameState.idle;
+    _resetHintTimer();
+    notifyListeners();
+  }
+
+  bool _skipRequested = false;
+
+  /// Sugar Crush / Coco Party: Converts remaining moves to rockets/bombs.
+  Future<void> _runPatPatPartyCelebration() async {
+    _isPartyMode = true;
+    onStatusBanner?.call('COCO PARTY! 🎉');
+    notifyListeners();
+
+    final rng = Random();
+    while (_movesLeft > 0) {
+      if (_skipRequested) {
+        _score += _movesLeft * 250;
+        _movesLeft = 0;
+        break;
+      }
+      _movesLeft--;
+      notifyListeners();
+
+      // Pick a random cell with a jelly
+      final candidates = <Position>[];
+      for (int r = 0; r < _grid.rows; r++) {
+        for (int c = 0; c < _grid.cols; c++) {
+          final cell = _grid.get(r, c);
+          if (cell.hasJelly && !cell.isIceWall) {
+            candidates.add(Position(r, c));
+          }
+        }
+      }
+
+      if (candidates.isEmpty) break;
+
+      final targetPos = candidates[rng.nextInt(candidates.length)];
+      final special = rng.nextBool()
+          ? (rng.nextBool()
+              ? SpecialType.rocketHorizontal
+              : SpecialType.rocketVertical)
+          : SpecialType.bomb;
+
+      final cell = _grid.get(targetPos.row, targetPos.col);
+      _grid.set(targetPos.row, targetPos.col,
+          cell.copyWith(specialType: special));
+      notifyListeners();
+
+      SoundManager.instance.play(SoundManager.special, volume: 0.7);
+      await animator.animateSpecialSpawn([targetPos], durationMs: 140);
+
+      // Detonate special
+      final effects = SpecialEngine.activateSpecial(_grid, targetPos, null);
+      final bonusScore = 150;
+      _score += bonusScore;
+      onScorePopup?.call(bonusScore, targetPos);
+      onScreenShake?.call(0.3);
+
+      final effectType = _getSpecialEffectType(special);
+      await animator.playSpecialEffect(SpecialEffect(
+        type: effectType,
+        origin: targetPos,
+        targets: effects.map((e) => e.position).toList(),
+        durationMs: 200,
+      ));
+
+      MatchEngine.applyGravity(_grid);
+      MatchEngine.fillEmpty(_grid, _config.availableTypes);
+      notifyListeners();
+
+      await _processMatchChain(null);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    _isPartyMode = false;
+    _skipRequested = false;
+  }
+
+  /// Tell the animator to fast-forward all running + pending animations,
+  /// or immediately finish the cascade and party sequence.
   void skipCascade() {
+    _skipRequested = true;
     animator.requestSkip();
+    if (_isPartyMode && _movesLeft > 0) {
+      _score += _movesLeft * 250;
+      _movesLeft = 0;
+      _isPartyMode = false;
+      _state = GameState.levelComplete;
+      SoundManager.instance.play(SoundManager.success, volume: 0.8);
+      notifyListeners();
+    }
   }
 
   // ─── 9b. addExtraMoves (from rewarded ad) ──────────────────────

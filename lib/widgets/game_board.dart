@@ -211,34 +211,36 @@ class _GameBoardState extends State<GameBoard>
             _panStart = null;
             _panStartCell = null;
           },
-          child: ClipRect(
-            child: AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, _) {
-                final pulseValue = _pulseController.value;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Position each cell individually for precise layout
-                    for (int r = 0; r < widget.grid.rows; r++)
-                      for (int c = 0; c < widget.grid.cols; c++)
-                        _buildAnimatedCell(
-                          r, c, cellSize, boardOffset, pulseValue,
+          child: RepaintBoundary(
+            child: ClipRect(
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, _) {
+                  final pulseValue = _pulseController.value;
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Position each cell individually for precise layout
+                      for (int r = 0; r < widget.grid.rows; r++)
+                        for (int c = 0; c < widget.grid.cols; c++)
+                          _buildAnimatedCell(
+                            r, c, cellSize, boardOffset, pulseValue,
+                          ),
+                      // Special activation effects overlay (laser, shockwave, etc.)
+                      if (widget.animator.activeSpecialEffect != null)
+                        Positioned.fill(
+                          child: SpecialEffectsOverlay(
+                            activeEffect: widget.animator.activeSpecialEffect!,
+                            cellSize: cellSize,
+                            gap: _gap,
+                            gridRows: widget.grid.rows,
+                            gridCols: widget.grid.cols,
+                          ),
                         ),
-                    // Special activation effects overlay (laser, shockwave, etc.)
-                    if (widget.animator.activeSpecialEffect != null)
-                      Positioned.fill(
-                        child: SpecialEffectsOverlay(
-                          activeEffect: widget.animator.activeSpecialEffect!,
-                          cellSize: cellSize,
-                          gap: _gap,
-                          gridRows: widget.grid.rows,
-                          gridCols: widget.grid.cols,
-                        ),
-                      ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -432,25 +434,37 @@ class _JellyCell extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // 1. Cell tile — subtle slot inside the navy board interior.
-        // Each cell is a faint lighter blue tile so the grid is visible
-        // (mockup-style) but unobtrusive.
+        // 1. Luxury glassmorphic tile slot with inner bevel depth
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x33FFFFFF), Color(0x14FFFFFF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0x35FFFFFF),
+                  Color(0x12FFFFFF),
+                  Color(0x04000000),
+                ],
               ),
-              border: Border.all(color: const Color(0x33FFFFFF), width: 0.6),
+              border: Border.all(color: Colors.white.withAlpha(45), width: 0.8),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x30000000),
+                  blurRadius: 3,
+                  offset: Offset(0, 1.5),
+                  spreadRadius: -0.5,
+                ),
+              ],
             ),
           ),
         ),
 
-        // 2. Obstacle overlay (behind jelly for ice-style overlays)
-        if (obstacleType != ObstacleType.none)
+        // 2. Obstacle underlay (ice, portal, etc.)
+        if (obstacleType == ObstacleType.ice1 ||
+            obstacleType == ObstacleType.ice2 ||
+            obstacleType == ObstacleType.portal)
           Positioned.fill(
             child: _ObstacleOverlay(
               obstacle: obstacleType,
@@ -465,6 +479,18 @@ class _JellyCell extends StatelessWidget {
               padding: EdgeInsets.all(cellSize * 0.04),
               child: _buildJellyContent(
                   jellyType, specialType, cellSize, pulseValue),
+            ),
+          ),
+
+        // 3b. Obstacle overlay (chains, fog, honey, box, chocolate, iceWall)
+        if (obstacleType != ObstacleType.none &&
+            obstacleType != ObstacleType.ice1 &&
+            obstacleType != ObstacleType.ice2 &&
+            obstacleType != ObstacleType.portal)
+          Positioned.fill(
+            child: _ObstacleOverlay(
+              obstacle: obstacleType,
+              cellSize: cellSize,
             ),
           ),
 
@@ -497,12 +523,7 @@ class _JellyCell extends StatelessWidget {
   ) {
     switch (special) {
       case SpecialType.none:
-        return Image.asset(
-          _jellySpritePath(type),
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.medium,
-          errorBuilder: (_, __, ___) => _FallbackJelly(type: type),
-        );
+        return _GlossyCandyJelly(type: type, cellSize: cellSize);
       case SpecialType.rocketHorizontal:
         return _RocketJelly(
             type: type, horizontal: true, pulseValue: pulseValue);
@@ -517,6 +538,78 @@ class _JellyCell extends StatelessWidget {
         return _LightningJelly(
             type: type, pulseValue: pulseValue, cellSize: cellSize);
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _GlossyCandyJelly — ultra-vibrant candy with 3D specular gloss & shadow
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GlossyCandyJelly extends StatelessWidget {
+  final JellyType type;
+  final double cellSize;
+
+  const _GlossyCandyJelly({
+    required this.type,
+    required this.cellSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        // 1. Soft ambient colored drop shadow beneath the candy
+        Positioned(
+          bottom: cellSize * 0.04,
+          child: Container(
+            width: cellSize * 0.70,
+            height: cellSize * 0.20,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(cellSize * 0.2),
+              boxShadow: [
+                BoxShadow(
+                  color: type.color.withAlpha(110),
+                  blurRadius: 7,
+                  spreadRadius: 1.5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // 2. High-res candy jelly sprite
+        Image.asset(
+          _jellySpritePath(type),
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, __, ___) => _FallbackJelly(type: type),
+        ),
+        // 3. 3D Specular gloss shine band on top-left quadrant
+        Positioned(
+          top: cellSize * 0.08,
+          left: cellSize * 0.12,
+          child: Container(
+            width: cellSize * 0.26,
+            height: cellSize * 0.16,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(cellSize * 0.12),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withAlpha(170),
+                  Colors.white.withAlpha(70),
+                  Colors.white.withAlpha(0),
+                ],
+                stops: const [0.0, 0.45, 1.0],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1466,6 +1559,10 @@ class _ShimmerPainter extends CustomPainter {
 // _ObstacleOverlay — visual overlay for obstacles
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _ObstacleOverlay — ultra-premium visual widgets for obstacles
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ObstacleOverlay extends StatelessWidget {
   final ObstacleType obstacle;
   final double cellSize;
@@ -1479,151 +1576,67 @@ class _ObstacleOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (obstacle) {
       case ObstacleType.ice1:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: const Color(0x4000E5FF),
-            border: Border.all(
-              color: const Color(0x6600E5FF),
-              width: 1,
-            ),
-          ),
-        );
+        return _IceObstacle(level: 1, cellSize: cellSize);
       case ObstacleType.ice2:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: const Color(0x6600E5FF),
-            border: Border.all(
-              color: const Color(0x9900E5FF),
-              width: 1.5,
-            ),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.ac_unit,
-              size: cellSize * 0.3,
-              color: Colors.white.withAlpha(80),
-            ),
-          ),
-        );
+        return _IceObstacle(level: 2, cellSize: cellSize);
       case ObstacleType.box:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF9B7520), Color(0xFF8B6914), Color(0xFF6B4E10)],
-            ),
-            border: Border.all(color: const Color(0xFFA07820), width: 1.5),
-          ),
-          child: CustomPaint(
-            painter: _CrossPainter(),
-          ),
-        );
+        return _WoodBoxObstacle(cellSize: cellSize);
       case ObstacleType.fog:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: const Color(0x88888888),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.cloud,
-              size: cellSize * 0.4,
-              color: Colors.white.withAlpha(60),
-            ),
-          ),
-        );
+        return _FogObstacle(cellSize: cellSize);
       case ObstacleType.chain1:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: CustomPaint(
-            painter: _ChainPainter(level: 1),
-          ),
-        );
+        return _ChainsObstacle(level: 1, cellSize: cellSize);
       case ObstacleType.chain2:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: CustomPaint(
-            painter: _ChainPainter(level: 2),
-          ),
-        );
+        return _ChainsObstacle(level: 2, cellSize: cellSize);
       case ObstacleType.chocolate:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF7B4320), Color(0xFF5C3317), Color(0xFF3D200E)],
-            ),
-          ),
-        );
+        return _ChocolateObstacle(cellSize: cellSize);
       case ObstacleType.honey:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: const Color(0x66FFB300),
-            border: Border.all(
-              color: const Color(0x88FFB300),
-              width: 1,
-            ),
-          ),
-        );
+        return _HoneyObstacle(cellSize: cellSize);
       case ObstacleType.portal:
         return Center(
           child: Container(
-            width: cellSize * 0.7,
-            height: cellSize * 0.7,
+            width: cellSize * 0.75,
+            height: cellSize * 0.75,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0x889040E0),
-              border: Border.all(
-                color: GameColors.buttonPurple,
-                width: 2,
+              gradient: const RadialGradient(
+                colors: [Color(0xFFC77DFF), Color(0xFF7B2CBF), Color(0xFF3C096C)],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: GameColors.buttonPurple.withAlpha(60),
-                  blurRadius: 8,
-                ),
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: const [
+                BoxShadow(color: Color(0xFF9D4EDD), blurRadius: 10, spreadRadius: 2),
               ],
             ),
+            child: const Icon(Icons.cyclone, color: Colors.white, size: 18),
           ),
         );
       case ObstacleType.iceWall:
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: const Color(0xAAB0E0FF),
-            border: Border.all(
-              color: const Color(0xBBB0E0FF),
-              width: 1.5,
-            ),
-          ),
-        );
+        return _IceObstacle(level: 2, cellSize: cellSize);
       case ObstacleType.bubble:
         return Center(
           child: Container(
-            width: cellSize * 0.76,
-            height: cellSize * 0.76,
+            width: cellSize * 0.82,
+            height: cellSize * 0.82,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withAlpha(30),
+              gradient: RadialGradient(
+                center: const Alignment(-0.35, -0.35),
+                radius: 0.9,
+                colors: [
+                  Colors.white.withAlpha(190),
+                  const Color(0x6080D8FF),
+                  const Color(0x30E040FB),
+                  const Color(0x1000E5FF),
+                ],
+              ),
               border: Border.all(
-                color: Colors.white.withAlpha(120),
+                color: Colors.white.withAlpha(180),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.white.withAlpha(20),
-                  blurRadius: 6,
+                  color: const Color(0x8080D8FF),
+                  blurRadius: 8,
+                  spreadRadius: 1,
                 ),
               ],
             ),
@@ -1632,6 +1645,477 @@ class _ObstacleOverlay extends StatelessWidget {
       case ObstacleType.none:
         return const SizedBox.shrink();
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ❄️ _IceObstacle — realistic 3D frozen crystal ice with cracks & frost
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _IceObstacle extends StatelessWidget {
+  final int level;
+  final double cellSize;
+
+  const _IceObstacle({required this.level, required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: level == 2
+              ? [
+                  const Color(0xCCB3E5FC),
+                  const Color(0x994FC3F7),
+                  const Color(0xBB0288D1),
+                ]
+              : [
+                  const Color(0x99E1F5FE),
+                  const Color(0x6681D4FA),
+                  const Color(0x8829B6F6),
+                ],
+        ),
+        border: Border.all(
+          color: Colors.white.withAlpha(level == 2 ? 220 : 160),
+          width: level == 2 ? 2.0 : 1.4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00E5FF).withAlpha(level == 2 ? 140 : 80),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CustomPaint(
+            painter: _IceCrackPainter(level: level),
+          ),
+          Positioned(
+            top: 2,
+            left: 4,
+            child: Container(
+              width: cellSize * 0.35,
+              height: 4,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                color: Colors.white.withAlpha(180),
+              ),
+            ),
+          ),
+          if (level == 2)
+            Center(
+              child: Icon(
+                Icons.ac_unit_rounded,
+                size: cellSize * 0.38,
+                color: Colors.white.withAlpha(190),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IceCrackPainter extends CustomPainter {
+  final int level;
+  _IceCrackPainter({required this.level});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withAlpha(level == 2 ? 220 : 160)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = level == 2 ? 1.6 : 1.2
+      ..strokeCap = StrokeCap.round;
+
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF01579B).withAlpha(140)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = level == 2 ? 2.2 : 1.6;
+
+    final w = size.width;
+    final h = size.height;
+
+    final path = Path();
+    path.moveTo(w * 0.15, h * 0.20);
+    path.lineTo(w * 0.38, h * 0.42);
+    path.lineTo(w * 0.65, h * 0.35);
+    path.lineTo(w * 0.85, h * 0.70);
+
+    path.moveTo(w * 0.38, h * 0.42);
+    path.lineTo(w * 0.30, h * 0.75);
+    path.lineTo(w * 0.18, h * 0.85);
+
+    if (level == 2) {
+      path.moveTo(w * 0.65, h * 0.35);
+      path.lineTo(w * 0.80, h * 0.18);
+      path.moveTo(w * 0.50, h * 0.55);
+      path.lineTo(w * 0.75, h * 0.80);
+    }
+
+    canvas.drawPath(path, shadowPaint);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IceCrackPainter old) => old.level != level;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⛓️ _ChainsObstacle — 3D metallic iron chains with golden padlock
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ChainsObstacle extends StatelessWidget {
+  final int level;
+  final double cellSize;
+
+  const _ChainsObstacle({required this.level, required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      alignment: Alignment.center,
+      children: [
+        CustomPaint(
+          painter: _HeavyChainPainter(level: level),
+        ),
+        Center(
+          child: Container(
+            width: cellSize * 0.36,
+            height: cellSize * 0.42,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [TT.goldShine, TT.gold, TT.goldDeep],
+              ),
+              border: Border.all(color: Colors.white, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(160),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: cellSize * 0.14,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3E2723),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  width: 4,
+                  height: 5,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF3E2723),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HeavyChainPainter extends CustomPainter {
+  final int level;
+  _HeavyChainPainter({required this.level});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    void drawChainLine(Offset start, Offset end) {
+      final linePaint = Paint()
+        ..color = const Color(0xFF424242)
+        ..strokeWidth = level == 2 ? 6.0 : 4.5
+        ..strokeCap = StrokeCap.round;
+
+      final highlightPaint = Paint()
+        ..color = const Color(0xFFE0E0E0)
+        ..strokeWidth = level == 2 ? 2.5 : 1.8
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawLine(start, end, linePaint);
+      canvas.drawLine(start, end, highlightPaint);
+
+      // Draw chain link rings along the line
+      const steps = 4;
+      for (int i = 0; i <= steps; i++) {
+        final t = i / steps;
+        final pt = Offset(
+          start.dx + (end.dx - start.dx) * t,
+          start.dy + (end.dy - start.dy) * t,
+        );
+        canvas.drawOval(
+          Rect.fromCenter(center: pt, width: 8, height: 6),
+          Paint()
+            ..color = const Color(0xFFBDBDBD)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+      }
+    }
+
+    drawChainLine(const Offset(4, 4), Offset(w - 4, h - 4));
+    if (level == 2) {
+      drawChainLine(Offset(w - 4, 4), Offset(4, h - 4));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeavyChainPainter old) => old.level != level;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🍫 _ChocolateObstacle — delicious 3D chocolate bar tablet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ChocolateObstacle extends StatelessWidget {
+  final double cellSize;
+  const _ChocolateObstacle({required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF6D3B1E), Color(0xFF4E2612), Color(0xFF331609)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(160),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFF8D4E27), width: 1),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(child: _buildChocoSquare()),
+                const SizedBox(width: 2),
+                Expanded(child: _buildChocoSquare()),
+              ],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(child: _buildChocoSquare()),
+                const SizedBox(width: 2),
+                Expanded(child: _buildChocoSquare()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChocoSquare() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF8D4E27), Color(0xFF5A2C14), Color(0xFF3B1B0B)],
+        ),
+        border: Border.all(color: const Color(0xFFA05B30), width: 0.8),
+      ),
+      child: Center(
+        child: Container(
+          width: 5,
+          height: 5,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withAlpha(40),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📦 _WoodBoxObstacle — 3D tropical wooden crate with brass brackets & nails
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WoodBoxObstacle extends StatelessWidget {
+  final double cellSize;
+  const _WoodBoxObstacle({required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFB8860B), Color(0xFF8B5A2B), Color(0xFF5C3317)],
+        ),
+        border: Border.all(color: const Color(0xFFD2B48C), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(160),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Diagonal X wood planks
+          CustomPaint(painter: _WoodPlankPainter()),
+          // 4 Brass corner studs
+          for (final align in const [
+            Alignment.topLeft,
+            Alignment.topRight,
+            Alignment.bottomLeft,
+            Alignment.bottomRight,
+          ])
+            Align(
+              alignment: align,
+              child: Container(
+                margin: const EdgeInsets.all(2.5),
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [TT.goldShine, TT.goldDeep],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WoodPlankPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF4A2508)
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.square;
+
+    final highlight = Paint()
+      ..color = const Color(0xFFCD853F)
+      ..strokeWidth = 1.0;
+
+    final m = size.width * 0.12;
+    canvas.drawLine(Offset(m, m), Offset(size.width - m, size.height - m), paint);
+    canvas.drawLine(Offset(m, m), Offset(size.width - m, size.height - m), highlight);
+
+    canvas.drawLine(Offset(size.width - m, m), Offset(m, size.height - m), paint);
+    canvas.drawLine(Offset(size.width - m, m), Offset(m, size.height - m), highlight);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ☁️ _FogObstacle — mystical volumetric mist
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FogObstacle extends StatelessWidget {
+  final double cellSize;
+  const _FogObstacle({required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: RadialGradient(
+          center: const Alignment(0, -0.2),
+          radius: 0.85,
+          colors: [
+            Colors.white.withAlpha(200),
+            const Color(0xCCB0BEC5),
+            const Color(0x7778909C),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.cloud_queue_rounded,
+          color: Colors.white,
+          size: cellSize * 0.48,
+          shadows: const [
+            Shadow(color: Colors.black26, blurRadius: 4),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🍯 _HoneyObstacle — viscous dripping amber honey
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HoneyObstacle extends StatelessWidget {
+  final double cellSize;
+  const _HoneyObstacle({required this.cellSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFD54F), Color(0xFFFFB300), Color(0xFFFF8F00)],
+        ),
+        border: Border.all(color: Colors.white.withAlpha(140), width: 1.2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66FFB300), blurRadius: 8, spreadRadius: 1),
+        ],
+      ),
+      child: Center(
+        child: Icon(
+          Icons.water_drop_rounded,
+          color: Colors.white.withAlpha(220),
+          size: cellSize * 0.44,
+        ),
+      ),
+    );
   }
 }
 
@@ -1650,27 +2134,60 @@ class _SelectionHighlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alpha = (150 + (105 * pulseValue)).toInt();
-    final borderWidth = 2.5 + pulseValue;
-    final scale = 1.0 + pulseValue * 0.06;
-
+    final scale = 1.02 + pulseValue * 0.05;
     return Transform.scale(
       scale: scale,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: GameColors.goldFrameMid.withAlpha(alpha),
-            width: borderWidth,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: GameColors.goldFrameMid.withAlpha((60 + 40 * pulseValue).toInt()),
-              blurRadius: 8 + pulseValue * 4,
-              spreadRadius: 1,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: TT.goldShine.withAlpha((180 + 75 * pulseValue).toInt()),
+                  width: 3.0,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: TT.goldBright.withAlpha((120 + 80 * pulseValue).toInt()),
+                    blurRadius: 12 + pulseValue * 6,
+                    spreadRadius: 2 + pulseValue * 2,
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withAlpha((140 * pulseValue).toInt()),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+          for (final align in const [
+            Alignment.topLeft,
+            Alignment.topRight,
+            Alignment.bottomLeft,
+            Alignment.bottomRight,
+          ])
+            Align(
+              alignment: align,
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: TT.goldShine,
+                      blurRadius: 4,
+                      spreadRadius: 1.5,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

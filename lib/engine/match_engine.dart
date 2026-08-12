@@ -457,13 +457,18 @@ class MatchEngine {
   // ──────────────────────────────────────────────
 
   /// Returns true if swapping [pos1] and [pos2] would produce at least
-  /// one match. Rejects chained cells immediately.
+  /// one match or if either piece is a special. Rejects non-swappable cells.
   static bool isValidSwap(GameGrid grid, Position pos1, Position pos2) {
     final c1 = grid.get(pos1.row, pos1.col);
     final c2 = grid.get(pos2.row, pos2.col);
 
-    if (c1.isChained || c2.isChained) return false;
-    if (!c1.hasJelly || !c2.hasJelly) return false;
+    if (!c1.canSwap || !c2.canSwap) return false;
+
+    // Swapping any special jelly is always a valid move
+    if (c1.specialType != SpecialType.none ||
+        c2.specialType != SpecialType.none) {
+      return true;
+    }
 
     // Temporarily swap
     swap(grid, pos1, pos2);
@@ -487,8 +492,8 @@ class MatchEngine {
 
   /// Removes matched cells and handles obstacle layers.
   ///
-  /// * ice2 → ice1 (jelly stays, obstacle downgrades)
-  /// * ice1 / fog / honey → none (jelly cleared)
+  /// * ice2 → ice1 (jelly cleared, ice downgrades)
+  /// * ice1 / fog / honey / chains → none (jelly cleared)
   /// * iceWall / portal → preserved (not cleared)
   ///
   /// If the match produces a special type, it spawns at [swapPosition]
@@ -510,11 +515,31 @@ class MatchEngine {
       for (final pos in match.positions) {
         final cell = grid.get(pos.row, pos.col);
 
-        // Handle obstacles
+        // Handle chains: matching breaks the chain
+        if (cell.obstacle == ObstacleType.chain2) {
+          grid.set(
+            pos.row,
+            pos.col,
+            cell.copyWith(clearJelly: true, obstacle: ObstacleType.chain1, specialType: SpecialType.none),
+          );
+          continue;
+        }
+        if (cell.obstacle == ObstacleType.chain1) {
+          grid.set(
+            pos.row,
+            pos.col,
+            cell.copyWith(clearJelly: true, obstacle: ObstacleType.none, specialType: SpecialType.none),
+          );
+          continue;
+        }
+
+        // Handle ice underlay: matching degrades ice and clears jelly so pieces fall
         if (cell.obstacle == ObstacleType.ice2) {
-          // Downgrade ice2 → ice1, keep jelly
-          grid.set(pos.row, pos.col,
-              cell.copyWith(obstacle: ObstacleType.ice1));
+          grid.set(
+            pos.row,
+            pos.col,
+            cell.copyWith(clearJelly: true, obstacle: ObstacleType.ice1, specialType: SpecialType.none),
+          );
           continue;
         }
         if (cell.obstacle == ObstacleType.ice1 ||
@@ -536,7 +561,10 @@ class MatchEngine {
           grid.set(
             pos.row,
             pos.col,
-            cell.copyWith(specialType: special),
+            cell.copyWith(
+              specialType: special,
+              obstacle: ObstacleType.none,
+            ),
           );
         } else {
           grid.set(

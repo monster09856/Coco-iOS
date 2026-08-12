@@ -264,15 +264,35 @@ gold_button, star_strip, bottom_nav, top_stats_bar) eklendi.
 
 ---
 
-## Sonraki Adımlar
+## Versiyon 1.2.0 — Büyük Oyun Motoru & Mantık Güncellemesi (Candy Crush & Royal Match Standardı)
 
-- [ ] Ses sistemi (prosedürel WAV üretimi) — son aşamada
-- [ ] Firebase yapılandırması (google-services.json, GoogleService-Info.plist)
-- [ ] Gerçek IAP ürün ID'leri (App Store Connect / Google Play Console)
-- [ ] Gerçek AdMob ürün ID'leri (test → production)
-- [ ] App Store / Google Play Store icon ve screenshot'lar
-- [ ] iOS Xcode build + App Store submit
-- [ ] Android Play Store submit
-- [ ] Performans optimizasyonu (gerekirse)
-- [ ] Daha fazla seviye varyasyonu / engel pattern'leri
-- [ ] Sosyal özellikler (liderlik tablosu, arkadaş sistemi)
+App Store kullanıcı geri bildirimleri doğrultusunda oyunun tüm mantık, eşleşme, engel, kombo ve görev mekanikleri sıfırdan elden geçirildi.
+
+### 1. Eşleşme ve Engel Motoru Düzeltmeleri
+- **Zincirli Taşlar (Chain / Cage Fix):** Zincirli taşlar kaydırılamaz ancak aynı renkte 3'lü eşleşmeye girdiğinde zinciri kırılır (`chain2 -> chain1 -> none`).
+- **Sis (Fog Fix):** Sisli karelerin yanındaki eşleşme ve patlamalarda sis dağılır ve altındaki taş serbest kalır.
+- **Buz (Ice 1 & Ice 2 Underlay Fix):** Buz taşın alt katmanıdır. Üzerindeki taş eşleştiğinde buz aşınır, taş patlar ve yerçekimiyle yeni taşlar akar.
+- **Çikolata Yayılma Mantığı:** Eğer oyuncu o tur en az 1 çikolata patlattıysa yeni çikolata yayılmaz; sadece dokunulmayan turlarda yayılır.
+- **Katman Render Sırası:** Zincir ve sis görsel katmanları taşın üzerine, buz ise taşın altına doğru derinlikle çizildi.
+
+### 2. Görev Takip ve Kazanma Sistemi Düzeltmesi (Goal Tracking Fix)
+- `GoalType.breakIce` (Buz kırma), `GoalType.clearChocolate` (Çikolata temizleme), `GoalType.makeCombos` (Kombo yapma) ve `GoalType.collectJelly` sayaçları tam ve eksiksiz olarak `GameController`'a bağlandı.
+- HUD üst barında tüm görev tipleri canlı sayaç ve ikonlarıyla gösterildi.
+
+### 3. Efsanevi Süper Kombolar (Special Combos Overhaul)
+- **Gökkuşağı + Bomba:** O renkteki tüm taşlar bombaya dönüşür ve aynı anda patlar!
+- **Gökkuşağı + Roket:** O renkteki tüm taşlar roketlere dönüşür ve tüm ekranı tarar!
+- **Gökkuşağı + Gökkuşağı:** Tüm tahta temizlenir.
+- **Bomba + Bomba:** 5x5 devasa şok dalgası.
+- **Roket + Bomba:** 3 satır + 3 sütun çapraz lazer.
+- **Roket + Roket:** Çapraz satır + sütun temizleme.
+- **Özel Taş Swap Koordinat Düzeltmesi:** Roket/Bomba kaydırıldığında hedef koordinatta tam ve doğru patlama sağlandı.
+
+### 4. Otomatik Tahta Karıştırma (Auto-Reshuffle on Deadlock)
+- Tahtada geçerli hamle kalmadığında oyun kilitlenmez; ekranda *"Hamle Kalmadı! Karıştırılıyor..."* bildirimi çıkarak taşlar otomatik yeniden karıştırılır.
+
+### 5. Seviye Sonu "PatPat Party" Kutlaması
+- Seviye kazanıldığında artan hamleler boşa gitmez; her kalan hamle tahtada Roket/Bombaya dönüşüp patlayarak ekstra puan ve altın kazandırır.
+
+### 6. Sürüm Yükseltmesi
+- `pubspec.yaml` versiyonu `1.2.0+11` olarak güncellendi.

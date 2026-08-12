@@ -80,21 +80,21 @@ class GameHud extends StatelessWidget {
 }
 
 /// Live goals strip shown below the HUD — each goal is a small chip with
-/// the jelly sprite + remaining count. Updates as the player collects.
+/// its icon/sprite + remaining count. Updates as the player progresses.
 class _GoalsStrip extends StatelessWidget {
   final List<LevelGoal> goals;
   const _GoalsStrip({required this.goals});
 
   @override
   Widget build(BuildContext context) {
-    final collectGoals = goals.where((g) => g.goalType == GoalType.collectJelly).take(4).toList();
-    if (collectGoals.isEmpty) return const SizedBox.shrink();
+    if (goals.isEmpty) return const SizedBox.shrink();
+    final displayGoals = goals.take(4).toList();
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        for (int i = 0; i < collectGoals.length; i++) ...[
+        for (int i = 0; i < displayGoals.length; i++) ...[
           if (i > 0) const SizedBox(width: 6),
-          _GoalChip(goal: collectGoals[i]),
+          _GoalChip(goal: displayGoals[i]),
         ],
       ],
     );
@@ -105,12 +105,29 @@ class _GoalChip extends StatelessWidget {
   final LevelGoal goal;
   const _GoalChip({required this.goal});
 
+  Widget _buildGoalIcon() {
+    switch (goal.goalType) {
+      case GoalType.collectJelly:
+        return Image.asset(
+          'assets/sprites/jelly_${goal.jellyType.name}.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(Icons.star, color: Colors.amber, size: 14),
+        );
+      case GoalType.breakIce:
+        return const Icon(Icons.ac_unit_rounded, color: Color(0xFF70D6FF), size: 16);
+      case GoalType.clearChocolate:
+        return const Icon(Icons.cookie_rounded, color: Color(0xFFFF9F1C), size: 16);
+      case GoalType.makeCombos:
+        return const Icon(Icons.bolt_rounded, color: Color(0xFFFFD166), size: 16);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final remaining = (goal.count - goal.collected).clamp(0, goal.count);
     final done = remaining == 0;
     return Container(
-      padding: const EdgeInsets.fromLTRB(3, 2, 8, 2),
+      padding: const EdgeInsets.fromLTRB(4, 2, 8, 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: Colors.black.withAlpha(160),
@@ -134,11 +151,7 @@ class _GoalChip extends StatelessWidget {
               color: Colors.white12,
             ),
             padding: const EdgeInsets.all(1),
-            child: Image.asset(
-              'assets/sprites/jelly_${goal.jellyType.name}.png',
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(Icons.help_outline, color: Colors.white, size: 14),
-            ),
+            child: _buildGoalIcon(),
           ),
           const SizedBox(width: 4),
           Text(

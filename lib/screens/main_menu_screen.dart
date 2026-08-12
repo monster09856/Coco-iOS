@@ -225,14 +225,14 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen>
                   activeIndex: 0,
                   tabs: [
                     IslandNavTab(
-                      icon: Icons.home_rounded,
-                      label: 'Ana Sayfa',
-                      onTap: () {},
+                      icon: Icons.map_rounded,
+                      label: 'Harita',
+                      onTap: () => context.go('/map'),
                     ),
                     IslandNavTab(
-                      icon: Icons.shopping_bag_rounded,
-                      label: 'Mağaza',
-                      onTap: () => context.push('/shop'),
+                      icon: Icons.public_rounded,
+                      label: 'Adalar',
+                      onTap: () => context.push('/adalar'),
                     ),
                     IslandNavTab(
                       icon: Icons.casino_rounded,
@@ -241,14 +241,14 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen>
                       isCenter: true,
                     ),
                     IslandNavTab(
-                      icon: Icons.egg_rounded,
-                      label: 'Yuva',
-                      onTap: () => context.push('/nest'),
+                      icon: Icons.shopping_bag_rounded,
+                      label: 'Mağaza',
+                      onTap: () => context.push('/shop'),
                     ),
                     IslandNavTab(
-                      icon: Icons.person_rounded,
-                      label: 'Profil',
-                      onTap: () => context.push('/profile'),
+                      icon: Icons.emoji_events_rounded,
+                      label: 'Etkinlik',
+                      onTap: () => context.push('/events'),
                     ),
                   ],
                 ),
