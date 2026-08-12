@@ -100,6 +100,7 @@ class _GameScreenState extends ConsumerState<GameScreen>
       duration: const Duration(milliseconds: 380),
     );
     final progress = ref.read(playerProgressProvider);
+    _showGreeting = widget.level == 1 && !progress.tutorialCompleted;
     _tutorial = TutorialManager(startCompleted: progress.tutorialCompleted);
     _startLevel(widget.level);
   }
@@ -486,20 +487,12 @@ class _GameScreenState extends ConsumerState<GameScreen>
                     step: _tutorial.currentStep!,
                     onContinue: () {
                       setState(() {
-                        _tutorial.advance();
-                        if (_tutorial.isCompleted) {
-                          ref
-                              .read(playerProgressProvider.notifier)
-                              .completeTutorial();
-                        }
+                        _tutorial.advance(widget.level);
                       });
                     },
                     onSkip: () {
                       setState(() {
-                        _tutorial.skip();
-                        ref
-                            .read(playerProgressProvider.notifier)
-                            .completeTutorial();
+                        _tutorial.skip(widget.level);
                       });
                     },
                   ),
